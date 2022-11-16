@@ -1,0 +1,6 @@
+# this is a toml 
+
+title = "soapffz's myman config"
+
+[cubox]
+api = "sdasdasda"
