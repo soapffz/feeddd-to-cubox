@@ -14,7 +14,6 @@ import (
 	"time"
 
 	mapset "github.com/deckarep/golang-set/v2"
-	"github.com/soapffz/common-go-functions/pkg"
 	"github.com/spf13/viper"
 )
 
@@ -79,9 +78,10 @@ func main() {
 	fromTime := time.Now().UTC().Add(-m * time.Duration(contrabseconds))
 
 	// 初始化配置信息
-	cuboxApi := viper.GetString("cubox.api")          //api
-	defaulttag := viper.GetString("cubox.defaulttag") //默认标签
-	threads := viper.GetInt("cubox.threads")          //并发数
+	cuboxApi := viper.GetString("cubox.api")                 //api
+	defaulttagcontent := viper.GetString("cubox.defaulttag") //默认标签
+	defaulttag := []string{defaulttagcontent}                // 标签处理为数组
+	threads := viper.GetInt("cubox.threads")                 //并发数
 	if cuboxApi == "" || cuboxApi == "sdasdasda" {
 		log.Println("[-] 请填写cubox的api")
 		os.Exit(0)
@@ -112,9 +112,7 @@ func main() {
 
 		// 解析指定时间内所有文章的链接及标题推送至cubox
 		articleCount := GetArticleLAndPushToCubox(allRssUrlList, fromTime, cuboxApi, defaulttag, threads, blArticleFilter)
-		if articleCount > 0 {
-			log.Println("[+] 解析完成，过去的" + strconv.Itoa(contrabseconds/60) + "分钟内解析出" + strconv.Itoa(articleCount) + "篇文章")
-		} else {
+		if articleCount == 0 {
 			log.Println("[+] 过去的" + strconv.Itoa(contrabseconds/60) + "分钟内没有更新的文章")
 		}
 	}
@@ -122,7 +120,7 @@ func main() {
 	log.Println("[+] 程序运行时间：" + endTime.Sub(startTime).String())
 }
 
-func GetArticleLAndPushToCubox(allRssUrlList []string, fromTime time.Time, cuboxApi string, defaulttag string, threads int, blArticleFilter localutils.Trie) int {
+func GetArticleLAndPushToCubox(allRssUrlList []string, fromTime time.Time, cuboxApi string, defaulttag []string, threads int, blArticleFilter localutils.Trie) int {
 	// 获取指定时间段内的文章链接，传入开始时间及rss链接列表
 
 	var wg sync.WaitGroup
@@ -136,6 +134,7 @@ func GetArticleLAndPushToCubox(allRssUrlList []string, fromTime time.Time, cubox
 	// 记录文章篇数
 	articleCount := 0
 	blArticleNum := 0
+	pushSuccNum := 0
 
 	// 收集文章标题用于后续分析，优化黑名单
 	articleTitleList := []string{}
@@ -189,10 +188,13 @@ func GetArticleLAndPushToCubox(allRssUrlList []string, fromTime time.Time, cubox
 
 						articleCount++
 
-						// if len(eachitem.URL) < 256 {
-						// 	// 进行推送
-						// 	PushDataToCubox(eachitem.URL, eachitem.Title, cuboxApi)
-						// }
+						if len(eachitem.URL) < 256 {
+							// 进行推送
+							pushSuccFlag := PushContentToCubox(eachitem.URL, eachitem.Title, cuboxApi, defaulttag)
+							if pushSuccFlag {
+								pushSuccNum++
+							}
+						}
 					}
 				}
 			}
@@ -204,20 +206,21 @@ func GetArticleLAndPushToCubox(allRssUrlList []string, fromTime time.Time, cubox
 	if articleCount > 0 {
 		log.Println("[+] 公众号文章标题关键词黑名单命中数量:" + strconv.Itoa(blArticleNum))
 		log.Println("[+] 本次共解析得到文章数量:" + strconv.Itoa(articleCount))
+		log.Println("[+] 本次推送Cubox成功数量:" + strconv.Itoa(pushSuccNum))
 	}
-	pkg.WriteSliceReturnRandomFilename(articleTitleList)
+	// pkg.WriteSliceReturnRandomFilename(articleTitleList)
 	return articleCount // 返回文章篇数
 }
 
-func PushDataToCubox(url string, title string, cuboxApi string, defaulttag string) {
+func PushContentToCubox(url string, title string, cuboxApi string, defaulttag []string) bool {
 	cuboxApiUrl := "https://cubox.pro/c/api/save/" + cuboxApi
 
 	// 构造json数据
-	postData := make(map[string]string)
+	postData := make(map[string]interface{})
 	postData["type"] = "url"
 	postData["content"] = url
 	postData["title"] = title
-	postData["tag"] = defaulttag
+	postData["tags"] = defaulttag
 
 	// 发送请求
 	b, _ := json.Marshal(postData)
@@ -233,14 +236,17 @@ func PushDataToCubox(url string, title string, cuboxApi string, defaulttag strin
 		err := json.Unmarshal([]byte(rs), &cbRespData)
 		if err != nil {
 			log.Fatal(err)
-			return
+			return false
 		}
 		if cbRespData.Code == -1 {
-			log.Println("[-] 推送失败：" + cbRespData.Message)
+			// log.Println("[-] 推送失败：" + cbRespData.Message)
+			return false
 		} else {
-			log.Println("[+] 文章推送成功：【" + title + "】【" + url + "】")
+			// log.Println("[+] 文章推送成功：【" + title + "】【" + url + "】")
+			return true
 		}
 	}
+	return false
 }
 
 func GetAllRssUrlFromFedddd(blPbCountSet mapset.Set[string], blPbCountFilter localutils.Trie) []string {
@@ -296,7 +302,7 @@ func GetAllRssUrlFromFedddd(blPbCountSet mapset.Set[string], blPbCountFilter loc
 		if len(wxRssUrlList) > 0 {
 			log.Println("[+] 公众号黑名单命中个数：" + strconv.Itoa(blPbCountNum))
 			log.Println("[+] 公众号关键词黑名单命中个数：" + strconv.Itoa(blPbCountNameNum))
-			pkg.WriteSliceReturnRandomFilename(pbCountNameList)
+			// pkg.WriteSliceReturnRandomFilename(pbCountNameList)
 			return wxRssUrlList
 		} else {
 			log.Println("[-] 未获取到任何公众号rss订阅链接")
