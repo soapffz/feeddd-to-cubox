@@ -1,3 +1,7 @@
+feeddd项目已于2023-07-05关闭，本项目也就没有了可用性，遂不再更新。-2023年7月19日
+
+可参考链接：[Feeddd项目关闭了，求推荐微信公众号的RSS服务](https://meta.appinn.net/t/topic/45617)
+------------------------------------------------------------------------------------
 # feeddd-to-cubox
 
 解析 feeddd 到 cubox 中。Parsing feeddd into cubox.
